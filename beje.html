@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Bejeweled (Match‑3)</title>
+    <style>
+        /* Game Variables */
+        :root {
+            --size: 8;                /* Grid size */
+            --cell: 72px;            /* Cell size */
+            --gap: 8px;              /* Grid gap */
+            --board: calc(var(--size) * var(--cell) + (var(--size) + 1) * var(--gap));
+            
+            /* Colors */
+            --bg: #0b1020;           /* Background */
+            --panel: #0f162c;        /* Panel background */
+            --text: #e5e7eb;         /* Text color */
+            --muted: #9ca3af;        /* Secondary text */
+            --frame: #223055;        /* Frame color */
+            --accent: #10b981;       /* Success color */
+            --danger: #ef4444;       /* Failure color */
+        }
+
+        /* Base Styles */
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            background: radial-gradient(1000px 600px at 20% -10%, #111936, #0b1020 60%);
+            color: var(--text);
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell,
+                         "Helvetica Neue", Arial;
+            display: grid;
+            place-items: center;
+            padding: 20px;
+        }
+
+        /* Layout */
+        .wrap {
+            width: min(96vw, 820px);
+        }
+
+        .topbar {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .title {
+            font-weight: 800;
+            letter-spacing: .5px;
+            color: #c7d2fe;
+        }
+
+        .status {
+            text-align: center;
+            font-weight: 700;
+            color: var(--muted);
+        }
+
+        .status.ok {
+            color: var(--accent);
+        }
+
+        .status.fail {
+            color: var(--danger);
+        }
+
+        .controls {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            align-items: center;
+        }
+
+        .btn, select {
+            padding: 8px 12px;
+            border-radius: 10px;
+            border: 1px solid var(--frame);
+            background: #0b1020;
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        .btn:hover {
+            border-color: #3b4a77;
+        }
+
+        /* Game Panel */
+        .panel {
+            background: #0b1020;
+            border: 1px solid var(--frame);
+            border-radius: 14px;
+            padding: 14px;
+            box-shadow: 0 10px 28px rgba(0,0,0,.35);
+        }
+
+        .info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            color: var(--muted);
+            font-size: 14px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .scorebox {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            background: #0b1020;
+            border: 1px solid var(--frame);
+            padding: 6px 10px;
+            border-radius: 10px;
+            color: var(--text);
+            font-weight: 700;
+            min-width: 120px;
+            text-align: center;
+        }
+
+        /* Game Board */
+        .board {
+            position: relative;
+            width: var(--board);
+            height: var(--board);
+            padding: var(--gap);
+            background: #0b1020;
+            border: 1px solid var(--frame);
+            border-radius: 16px;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            overflow: hidden;
+        }
+
+        .grid {
+            position: absolute;
+            inset: 0;
+            padding: var(--gap);
+            display: grid;
+            grid-template-columns: repeat(var(--size), var(--cell));
+            grid-template-rows: repeat(var(--size), var(--cell));
+            gap: var(--gap);
+            pointer-events: none;
+        }
+
+        .grid .cell {
+            background: #121a33;
+            border-radius: 12px;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,.25);
+        }
+
+        /* Gems */
+        .gems {
+            position: absolute;
+            inset: 0;
+        }
+
+        .gem {
+            position: absolute;
+            width: var(--cell);
+            height: var(--cell);
+            display: grid;
+            place-items: center;
+            border-radius: 14px;
+            transition: transform 160ms ease, opacity 160ms ease;
+            will-change: transform;
+            cursor: pointer;
+        }
+
+        .gemInner {
+            width: 76%;
+            height: 76%;
+            border-radius: 22%;
+            box-shadow: inset 0 6px 10px rgba(255,255,255,.25),
+                        inset 0 -10px 14px rgba(0,0,0,.35),
+                        0 6px 14px rgba(0,0,0,.35);
+        }
+
+        .gem.selected {
+            outline: 3px solid #c7d2fe;
+            outline-offset: -4px;
+        }
+
+        .gem.hint {
+            animation: pulse 800ms ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1) translate(var(--x), var(--y));
+            }
+            50% {
+                transform: scale(1.06) translate(var(--x), var(--y));
+            }
+        }
+
+        .shake {
+            animation: shake 180ms ease;
+        }
+
+        @keyframes shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-4px); }
+            50% { transform: translateX(4px); }
+            75% { transform: translateX(-3px); }
+            100% { transform: translateX(0); }
+        }
+
+        /* 8 Gem Color Themes */
+        .t0 .gemInner {
+            background: radial-gradient(60% 60% at 40% 30%, #ffedad, #f59e0b);
+        }
+
+        .t1 .gemInner {
+            background: radial-gradient(60% 60% at 40% 30%, #ffd6d6, #ef4444);
+        }
+
+        .t2 .gemInner {
+            background: radial-gradient(60% 60% at 40% 30%, #d6fff8, #14b8a6);
+        }
+
+        .t3 .gemInner {
+            background: radial-gradient(60% 60% at 40% 30%, #e3e3ff, #6366f1);
+        }
+
+        .t4 .gemInner {
+            background: radial-gradient(60% 60% at 40% 30%, #ffe3ff, #a855f7);
+        }
+
+        .t5 .gemInner {
+            background: radial-gradient(60% 60% at 40% 30%, #e2ffd6, #22c55e);
+        }
+
+        .t6 .gemInner {
+            background: radial-gradient(60% 60% at 40% 30%, #d6f1ff, #0ea5e9);
+        }
+
+        .t7 .gemInner {
+            background: radial-gradient(60% 60% at 40% 30%, #ffe1d6, #fb7185);
+        }
+
+        .legend {
+            margin-top: 10px;
+            color: var(--muted);
+            text-align: center;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="topbar">
+            <div class="title">Bejeweled (Match‑3)</div>
+            <div id="status" class="status">Make matches of 3+ by swapping adjacent gems.</div>
+            <div class="controls">
+                <select id="mode">
+                    <option value="moves">Moves (30)</option>
+                    <option value="timed">Timed (60s)</option>
+                </select>
+                <button id="hintBtn" class="btn">Hint</button>
+                <button id="newGame" class="btn">New game</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="info">
+                <div class="scorebox">
+                    <div class="badge">Score: <span id="score">0</span></div>
+                    <div class="badge">Best: <span id="best">0</span></div>
+                </div>
+                <div class="scorebox">
+                    <div class="badge" id="movesWrap" style="display:none">
+                        Moves left: <span id="moves">0</span>
+                    </div>
+                    <div class="badge" id="timeWrap" style="display:none">
+                        Time left: <span id="time">0</span>s
+                    </div>
+                    <div class="badge">Combo: <span id="combo">x1</span></div>
+                </div>
+            </div>
+
+            <div id="board" class="board" aria-label="Match-3 board">
+                <div id="grid" class="grid"></div>
+                <div id="gems" class="gems"></div>
+            </div>
+
+            <div class="legend">
+                Click or drag to swap adjacent gems. Only swaps that create a match are allowed. Use Hint if stuck.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (() => {
+            // Configuration
+            const SIZE = 8;                    // 8x8 grid
+            const TYPES = 8;                   // 8 gem types
+            const CELL = parseInt(getComputedStyle(document.documentElement)
+                .getPropertyValue('--cell')) || 72;
+            const GAP = parseInt(getComputedStyle(document.documentElement)
+                .getPropertyValue('--gap')) || 8;
+            const BASE_SCORE = 10;             // Points per gem
+            const BONUS_4 = 20;               // Extra points for 4-in-a-row
+            const BONUS_5 = 50;               // Extra points for 5+
+            const SWAP_MS = 160;              // Swap animation duration
+            const CLEAR_MS = 180;             // Clear animation duration
+            const DROP_MS = 160;              // Drop animation duration
+
+            // Local Storage Keys
+            const MODE_KEYS = {
+                moves: 'bejeweled-best-moves',
+                timed: 'bejeweled-best-timed'
+            };
+
+            // DOM Elements
+            const boardEl = document.getElementById('board');
+            const gridEl = document.getElementById('grid');
+            const gemsEl = document.getElementById('gems');
+            const statusEl = document.getElementById('status');
+            const scoreEl = document.getElementById('score');
+            const bestEl = document.getElementById('best');
+            const comboEl = document.getElementById('combo');
+            const movesWrap = document.getElementById('movesWrap');
+            const timeWrap = document.getElementById('timeWrap');
+            const movesEl = document.getElementById('moves');
+            const timeEl = document.getElementById('time');
+            const modeSel = document.getElementById('mode');
+            const newBtn = document.getElementById('newGame');
+            const hintBtn = document.getElementById('hintBtn');
+
+            // Game State
+            let grid;                         // Number matrix of gem types (-1 empty)
+            let gems = new Map();             // ID -> gem object
+            let idSeq = 1;                   // Sequence for unique IDs
+            let selected = null;              // {r,c} of selected gem
+            let locking = false;              // Input lock during animations
+            let combo = 1;                   // Combo multiplier
+            let score = 0;
+            let mode = 'moves';              // 'moves' or 'timed'
+            let movesLeft = 30;
+            let timeLeft = 60;
+            let timer = null;
+            let best = 0;
+            let hintCells = [];              // Cells to highlight for hints
+
+            // Utility Functions
+            const posFor = (r, c) => {
+                const x = GAP + c * (CELL + GAP);
+                const y = GAP + r * (CELL + GAP);
+                return `translate(${x}px, ${y}px)`;
+            };
+
+            const inBounds = (r, c) => r >= 0 && r < SIZE && c >= 0 && c < SIZE;
+
+            function setStatus(text, cls = null) {
+                statusEl.textContent = text;
+                statusEl.className = 'status' + (cls ? ' ' + cls : '');
+            }
+
+            function updateHUD() {
+                scoreEl.textContent = String(score);
+                comboEl.textContent = 'x' + combo;
+                movesEl.textContent = String(movesLeft);
+                timeEl.textContent = String(timeLeft);
+                bestEl.textContent = String(best);
+                movesWrap.style.display = mode === 'moves' ? '' : 'none';
+                timeWrap.style.display = mode === 'timed' ? '' : 'none';
+            }
+
+            function setBestIfNeeded() {
+                if (score > best) {
+                    best = score;
+                    localStorage.setItem(MODE_KEYS[mode], String(best));
+                }
+            }
+
+            // Board Setup
+            function makeGridNoMatches() {
+                grid = Array.from({length: SIZE}, () => 
+                    Array.from({length: SIZE}, () => 0)
+                );
+
+                for (let r = 0; r < SIZE; r++) {
+                    for (let c = 0; c < SIZE; c++) {
+                        let t;
+                        do {
+                            t = randType();
+                        } while (
+                            (c >= 2 && grid[r][c-1] === t && grid[r][c-2] === t) ||
+                            (r >= 2 && grid[r-1][c] === t && grid[r-2][c] === t)
+                        );
+                        grid[r][c] = t;
+                    }
+                }
+
+                // Ensure there is at least one valid move, else reshuffle
+                if (!hasAnyMove()) {
+                    return makeGridNoMatches();
+                }
+                return grid;
+            }
+
+            function randType() {
+                return Math.floor(Math.random() * TYPES);
+            }
+
+            // DOM Build Functions
+            function buildGridBG() {
+                gridEl.innerHTML = '';
+                gridEl.style.setProperty('--size', SIZE);
+                for (let i = 0; i < SIZE * SIZE; i++) {
+                    const d = document.createElement('div');
+                    d.className = 'cell';
+                    gridEl.appendChild(d);
+                }
+            }
+
+            function createGem(r, c, t) {
+                const id = idSeq++;
+                const el = document.createElement('div');
+                el.className = `gem t${t}`;
+                el.dataset.id = String(id);
+                el.style.transform = posFor(r, c);
+                
+                // Set CSS variables for animations
+                const pos = posFor(r, c);
+                const xMatch = pos.match(/translate\(([^,]+)px, /);
+                const yMatch = pos.match(/, ([^p]+)px\)/);
+                el.style.setProperty('--x', xMatch ? xMatch[1] + 'px' : '0px');
+                el.style.setProperty('--y', yMatch ? yMatch[1] + 'px' : '0px');
+
+                const inner = document.createElement('div');
+                inner.className = 'gemInner';
+                el.appendChild(inner);
+
+                el.addEventListener('pointerdown', onPointerDown);
+                el.addEventListener('click', onGemClick);
+                gemsEl.appendChild(el);
+
+                const obj = { id, r, c, t, el };
+                gems.set(id, obj);
+                return obj;
+            }
+
+            function rebuildDOM() {
+                gems.clear();
+                gemsEl.innerHTML = '';
+                for (let r = 0; r < SIZE; r++) {
+                    for (let c = 0; c < SIZE; c++) {
+                        createGem(r, c, grid[r][c]);
+                    }
+                }
+            }
+
+            // Matching Logic
+            function findMatches(g) {
+                const toClear = new Set();
+                let bonuses = 0;
+
+                // Check rows
+                for (let r = 0; r < SIZE; r++) {
+                    let runT = g[r][0], runStart = 0;
+                    for (let c = 1; c <= SIZE; c++) {
+                        const t = c < SIZE ? g[r][c] : -999;
+                        if (t !== runT) {
+                            const len = c - runStart;
+                            if (runT >= 0 && len >= 3) {
+                                for (let k = runStart; k < c; k++) {
+                                    toClear.add(`${r},${k}`);
+                                }
+                                if (len === 4) bonuses += BONUS_4;
+                                else if (len >= 5) bonuses += BONUS_5;
+                            }
+                            runT = t;
+                            runStart = c;
+                        }
+                    }
+                }
+
+                // Check columns
+                for (let c = 0; c < SIZE; c++) {
+                    let runT = g[0][c], runStart = 0;
+                    for (let r = 1; r <= SIZE; r++) {
+                        const t = r < SIZE ? g[r][c] : -999;
+                        if (t !== runT) {
+                            const len = r - runStart;
+                            if (runT >= 0 && len >= 3) {
+                                for (let k = runStart; k < r; k++) {
+                                    toClear.add(`${k},${c}`);
+                                }
+                                if (len === 4) bonuses += BONUS_4;
+                                else if (len >= 5) bonuses += BONUS_5;
+                            }
+                            runT = t;
+                            runStart = r;
+                        }
+                    }
+                }
+
+                return {cells: toClear, bonus: bonuses};
+            }
+
+            function hasAnyMove() {
+                // Try swapping right or down neighbors to see if match forms
+                for (let r = 0; r < SIZE; r++) {
+                    for (let c = 0; c < SIZE; c++) {
+                        if (c + 1 < SIZE) {
+                            if (wouldMatch(r, c, r, c + 1)) return true;
+                        }
+                        if (r + 1 < SIZE) {
+                            if (wouldMatch(r, c, r + 1, c)) return true;
+                        }
+                    }
+                }
+                return false;
+            }
+
+            function wouldMatch(r1, c1, r2, c2) {
+                const g = grid.map(row => row.slice());
+                [g[r1][c1], g[r2][c2]] = [g[r2][c2], g[r1][c1]];
+                const {cells} = findMatches(g);
+                return cells.size > 0;
+            }
+
+            function getHint() {
+                for (let r = 0; r < SIZE; r++) {
+                    for (let c = 0; c < SIZE; c++) {
+                        if (c + 1 < SIZE && wouldMatch(r, c, r, c + 1)) {
+                            return [[r, c], [r, c + 1]];
+                        }
+                        if (r + 1 < SIZE && wouldMatch(r, c, r + 1, c)) {
+                            return [[r, c], [r + 1, c]];
+                        }
+                    }
+                }
+                return null;
+            }
+
+            // Animation Helpers
+            function moveGemTo(obj, r, c) {
+                obj.r = r;
+                obj.c = c;
+                obj.el.style.transform = posFor(r, c);
+                
+                const pos = posFor(r, c);
+                const xMatch = pos.match(/translate\(([^,]+)px, /);
+                const yMatch = pos.match(/, ([^p]+)px\)/);
+                obj.el.style.setProperty('--x', xMatch ? xMatch[1] + 'px' : '0px');
+                obj.el.style.setProperty('--y', yMatch ? yMatch[1] + 'px' : '0px');
+            }
+
+            function gemAt(r, c) {
+                // Find gem with r,c coordinates
+                for (const g of gems.values()) {
+                    if (g.r === r && g.c === c) return g;
+                }
+                return null;
+            }
+
+            // Game Flow
+            function init() {
+                mode = modeSel.value;
+                idSeq = 1;
+                selected = null;
+                locking = false;
+                hintCells = [];
+                combo = 1;
+                score = 0;
+                movesLeft = 30;
+                timeLeft = 60;
+                clearInterval(timer);
+
+                best = Number(localStorage.getItem(MODE_KEYS[mode]) || 0);
+                setStatus(mode === 'moves' ? 
+                    'Make matches in 30 moves.' : 
+                    'Score as much as you can in 60 seconds.'
+                );
+
+                buildGridBG();
+                makeGridNoMatches();
+                rebuildDOM();
+                updateHUD();
+
+                if (mode === 'timed') {
+                    timer = setInterval(() => {
+                        if (locking) return;
+                        timeLeft--;
+                        if (timeLeft <= 0) {
+                            timeLeft = 0;
+                            endGame();
+                        }
+                        updateHUD();
+                    }, 1000);
+                }
+            }
+
+            function endGame() {
+                clearInterval(timer);
+                setBestIfNeeded();
+                updateHUD();
+                setStatus('Game Over', 'fail');
+                locking = true;
+            }
+
+            function startCascade(initial = false) {
+                if (locking && !initial) return;
+                locking = true;
+                let comboStep = initial ? 1 : combo;
+
+                function step() {
+                    const {cells, bonus} = findMatches(grid);
+                    if (cells.size === 0) {
+                        // No more matches; check for deadlocks
+                        if (!hasAnyMove()) {
+                            reshuffle();
+                        }
+                        locking = false;
+                        if (mode === 'moves' && movesLeft <= 0) {
+                            endGame();
+                        }
+                        return;
+                    }
+
+                    // Clear matched cells
+                    const toClearArr = Array.from(cells).map(s => s.split(',').map(Number));
+
+                    // Score
+                    const clearedCount = toClearArr.length;
+                    score += (BASE_SCORE * clearedCount) * comboStep + bonus;
+                    updateHUD();
+
+                    // Animate clear
+                    const toRemove = [];
+                    for (const [r, c] of toClearArr) {
+                        const g = gemAt(r, c);
+                        if (g) {
+                            g.el.style.opacity = '0';
+                            g.el.firstChild.style.transform = 'scale(0.4)';
+                            toRemove.push(g);
+                        }
+                        grid[r][c] = -1;
+                    }
+
+                    setTimeout(() => {
+                        // Remove DOM elements
+                        toRemove.forEach(g => {
+                            if (g.el.isConnected) g.el.remove();
+                            gems.delete(g.id);
+                        });
+
+                        // Drop and fill
+                        let spawnList = [];
+                        for (let c = 0; c < SIZE; c++) {
+                            let write = SIZE - 1;
+                            for (let r = SIZE - 1; r >= 0; r--) {
+                                if (grid[r][c] !== -1) {
+                                    grid[write][c] = grid[r][c];
+                                    if (write !== r) {
+                                        // Move existing gem object
+                                        const g = gemAt(r, c);
+                                        if (g) moveGemTo(g, write, c);
+                                    }
+                                    write--;
+                                }
+                            }
+                            // Fill above with new gems
+                            for (let r = write; r >= 0; r--) {
+                                const t = randType();
+                                grid[r][c] = t;
+                                spawnList.push([r, c, t]);
+                            }
+                        }
+
+                        // Spawn new gems from top
+                        for (const [r, c, t] of spawnList) {
+                            const g = createGem(-1, c, t); // Start above board
+                            g.el.style.opacity = '0';
+                            requestAnimationFrame(() => {
+                                g.el.style.transition = 'none';
+                                g.el.style.transform = posFor(-1, c);
+                                g.el.offsetHeight; // Force reflow
+                                g.el.style.transition = 
+                                    `transform ${DROP_MS}ms ease, opacity 160ms ease`;
+                                g.el.style.opacity = '1';
+                                moveGemTo(g, r, c);
+                            });
+                        }
+
+                        // After drops, continue cascades
+                        setTimeout(() => {
+                            comboStep++;
+                            combo = comboStep;
+                            updateHUD();
+                            step();
+                        }, DROP_MS + 40);
+                    }, CLEAR_MS);
+                }
+
+                combo = 1;
+                updateHUD();
+                step();
+            }
+
+            function attemptSwap(r1, c1, r2, c2, fromPlayer = false) {
+                if (locking) return;
+                if (!inBounds(r1, c1) || !inBounds(r2, c2)) return;
+                if (Math.abs(r1 - r2) + Math.abs(c1 - c2) !== 1) return;
+
+                // Clear previous hint highlight
+                clearHintHighlight();
+                locking = true;
+
+                const g1 = gemAt(r1, c1), g2 = gemAt(r2, c2);
+                if (!g1 || !g2) {
+                    locking = false;
+                    return;
+                }
+
+                // Swap in grid
+                [grid[r1][c1], grid[r2][c2]] = [grid[r2][c2], grid[r1][c1]];
+
+                // Animate swap
+                moveGemTo(g1, r2, c2);
+                moveGemTo(g2, r1, c1);
+
+                setTimeout(() => {
+                    const {cells} = findMatches(grid);
+                    if (cells.size === 0) {
+                        // Swap back
+                        [grid[r1][c1], grid[r2][c2]] = [grid[r2][c2], grid[r1][c1]];
+                        moveGemTo(g1, r1, c1);
+                        moveGemTo(g2, r2, c2);
+
+                        // Shake to indicate invalid move
+                        boardEl.classList.add('shake');
+                        setTimeout(() => boardEl.classList.remove('shake'), 200);
+                        locking = false;
+                        return;
+                    } else {
+                        // Valid move; consume move if applicable
+                        if (fromPlayer && mode === 'moves') {
+                            movesLeft = Math.max(0, movesLeft - 1);
+                        }
+
+                        // Begin cascades
+                        startCascade();
+
+                        // Clear selections
+                        if (selected) {
+                            const gsel = gemAt(selected.r, selected.c);
+                            if (gsel) gsel.el.classList.remove('selected');
+                            selected = null;
+                        }
+                    }
+                }, SWAP_MS + 10);
+            }
+
+            // Reshuffle when no moves left
+            function reshuffle() {
+                // Clear any selections and hints
+                if (selected) {
+                    const selGem = gemAt(selected.r, selected.c);
+                    if (selGem) selGem.el.classList.remove('selected');
+                    selected = null;
+                }
+                clearHintHighlight();
+                
+                // Collect types
+                const pool = [];
+                for (let r = 0; r < SIZE; r++) {
+                    for (let c = 0; c < SIZE; c++) {
+                        pool.push(grid[r][c]);
+                    }
+                }
+
+                // Shuffle pool
+                for (let i = pool.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [pool[i], pool[j]] = [pool[j], pool[i]];
+                }
+
+                // Place back
+                for (let r = 0; r < SIZE; r++) {
+                    for (let c = 0; c < SIZE; c++) {
+                        grid[r][c] = pool.pop();
+                    }
+                }
+
+                // If still no move or initial matches, rebuild fresh
+                if (!hasAnyMove() || findMatches(grid).cells.size > 0) {
+                    makeGridNoMatches();
+                }
+
+                // Rebuild DOM positions to new grid
+                gemsEl.innerHTML = '';
+                gems.clear();
+                idSeq = 1;
+                for (let r = 0; r < SIZE; r++) {
+                    for (let c = 0; c < SIZE; c++) {
+                        createGem(r, c, grid[r][c]);
+                    }
+                }
+                
+                // Ensure game is not locked after reshuffle
+                locking = false;
+            }
+
+            // Input Handlers
+            function onGemClick(e) {
+                if (locking) {
+                    console.log('Game is locked, ignoring click');
+                    return;
+                }
+                
+                const id = Number(e.currentTarget.dataset.id);
+                const g = gems.get(id);
+                if (!g) return;
+
+                // Clear any existing hints when clicking
+                clearHintHighlight();
+
+                if (!selected) {
+                    selected = {r: g.r, c: g.c};
+                    g.el.classList.add('selected');
+                    return;
+                }
+
+                const {r, c} = selected;
+                if (r === g.r && c === g.c) {
+                    g.el.classList.remove('selected');
+                    selected = null;
+                    return;
+                }
+
+                // If adjacent, attempt swap
+                if (Math.abs(r - g.r) + Math.abs(c - g.c) === 1) {
+                    const selGem = gemAt(r, c);
+                    if (selGem) selGem.el.classList.remove('selected');
+                    attemptSwap(r, c, g.r, g.c, true);
+                    selected = null;
+                } else {
+                    // Select new gem
+                    const selGem = gemAt(r, c);
+                    if (selGem) selGem.el.classList.remove('selected');
+                    selected = {r: g.r, c: g.c};
+                    g.el.classList.add('selected');
+                }
+            }
+
+            // Touch/drag swap
+            let dragStart = null;
+
+            function onPointerDown(e) {
+                if (locking) return;
+                const id = Number(e.currentTarget.dataset.id);
+                const g = gems.get(id);
+                if (!g) return;
+
+                dragStart = { id, r: g.r, c: g.c, x: e.clientX, y: e.clientY };
+                e.currentTarget.setPointerCapture(e.pointerId);
+                e.currentTarget.addEventListener('pointermove', onPointerMove);
+                e.currentTarget.addEventListener('pointerup', onPointerUp);
+                e.currentTarget.addEventListener('pointercancel', onPointerUp);
+            }
+
+            function onPointerMove(e) {
+                if (!dragStart) return;
+                const dx = e.clientX - dragStart.x;
+                const dy = e.clientY - dragStart.y;
+                const threshold = 24;
+
+                if (Math.abs(dx) < threshold && Math.abs(dy) < threshold) return;
+
+                let r2 = dragStart.r, c2 = dragStart.c;
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    c2 += dx > 0 ? 1 : -1;
+                } else {
+                    r2 += dy > 0 ? 1 : -1;
+                }
+
+                onPointerUp(e);
+                attemptSwap(dragStart.r, dragStart.c, r2, c2, true);
+            }
+
+            function onPointerUp(e) {
+                const t = e.currentTarget;
+                t.removeEventListener('pointermove', onPointerMove);
+                t.removeEventListener('pointerup', onPointerUp);
+                t.removeEventListener('pointercancel', onPointerUp);
+                dragStart = null;
+            }
+
+            // Hint System
+            function clearHintHighlight() {
+                for (const [r, c] of hintCells) {
+                    const g = gemAt(r, c);
+                    if (g) g.el.classList.remove('hint');
+                }
+                hintCells = [];
+            }
+
+            function showHint() {
+                if (locking) return;
+                
+                clearHintHighlight();
+                
+                // Clear any current selection first
+                if (selected) {
+                    const selGem = gemAt(selected.r, selected.c);
+                    if (selGem) selGem.el.classList.remove('selected');
+                    selected = null;
+                }
+                
+                const h = getHint();
+                if (!h) {
+                    setStatus('No moves. Reshuffling…', 'fail');
+                    // Don't lock during reshuffle
+                    setTimeout(() => {
+                        reshuffle();
+                        setStatus(mode === 'moves' ? 
+                            'Make matches in 30 moves.' : 
+                            'Score as much as you can in 60 seconds.');
+                    }, 100);
+                    return;
+                }
+
+                hintCells = h;
+                for (const [r, c] of h) {
+                    const g = gemAt(r, c);
+                    if (g) g.el.classList.add('hint');
+                }
+                
+                // Clear hint after 2 seconds
+                setTimeout(() => {
+                    clearHintHighlight();
+                }, 2000);
+            }
+
+            // Event Listeners
+            newBtn.addEventListener('click', () => {
+                clearInterval(timer);
+                init();
+            });
+
+            hintBtn.addEventListener('click', showHint);
+
+            modeSel.addEventListener('change', () => {
+                clearInterval(timer);
+                init();
+            });
+
+            // Safety mechanism: Double-click anywhere to unlock if stuck
+            document.addEventListener('dblclick', () => {
+                if (locking) {
+                    console.log('Emergency unlock triggered');
+                    locking = false;
+                    clearHintHighlight();
+                    if (selected) {
+                        const selGem = gemAt(selected.r, selected.c);
+                        if (selGem) selGem.el.classList.remove('selected');
+                        selected = null;
+                    }
+                    setStatus('Game unlocked. Try again.');
+                }
+            });
+
+            // Debug function - remove in production
+            window.debugGame = () => {
+                console.log('Game State:', {
+                    locking,
+                    selected,
+                    mode,
+                    movesLeft,
+                    timeLeft,
+                    score,
+                    combo
+                });
+            };
+
+            // Keyboard controls
+            window.addEventListener('keydown', (e) => {
+                if (locking) return;
+
+                if (e.key === 'h' || e.key === 'H') {
+                    showHint();
+                }
+
+                if (!selected) return;
+
+                const {r, c} = selected;
+                let r2 = r, c2 = c, dir = null;
+
+                if (e.key === 'ArrowLeft') {
+                    c2 = c - 1;
+                    dir = 'L';
+                } else if (e.key === 'ArrowRight') {
+                    c2 = c + 1;
+                    dir = 'R';
+                } else if (e.key === 'ArrowUp') {
+                    r2 = r - 1;
+                    dir = 'U';
+                } else if (e.key === 'ArrowDown') {
+                    r2 = r + 1;
+                    dir = 'D';
+                }
+
+                if (dir) {
+                    const selGem = gemAt(r, c);
+                    if (selGem) selGem.el.classList.remove('selected');
+                    selected = null;
+                    attemptSwap(r, c, r2, c2, true);
+                    e.preventDefault();
+                }
+            });
+
+            // Initialize game
+            init();
+            // Run an initial cascade check
+            startCascade(true);
+        })();
+    </script>
+</body>
+</html>
+
+    
