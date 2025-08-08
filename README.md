@@ -31,13 +31,17 @@ Arcade Hub is a sleek browser-based arcade interface featuring four beloved clas
 2. Open `index.html` in your browser.
 3. Click any game card to launch it in the built-in player.
 4. Use the toolbar to reload, go fullscreen, or open in a new tab.
+Or
+use below link 
+
+https://amitraikkr.github.io/gpt5-arcade-hub/
 
 ---
 
 ## 🖼️ Preview
 
 <p align="center">
-  <img src="https://user-images.githubusercontent.com/your-screenshot.png" alt="Arcade Hub Screenshot" width="700"/>
+  <img src="image.png" alt="Arcade Hub Screenshot" width="700"/>
 </p>
 
 ---
